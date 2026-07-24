@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Processador de Relatório Financeiro — MediQuo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Bibliotecas externas via CDN -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <style>
+    /* ============================================================
+       DESIGN SYSTEM MEDIQUO
+       Fonte: Montserrat | Cor primária: #491e9c
+       ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cor-primaria: #491e9c;
+      --cor-primaria-hover: #5e2dbd;
+      --cor-primaria-light: #6b3ec4;
+      --cor-fundo: #f5f5f7;
+      --cor-card: #ffffff;
+      --cor-texto: #1a1a2e;
+      --cor-texto-sec: #6b7280;
+      --cor-borda: #e5e7eb;
+      --cor-sucesso: #10b981;
+      --cor-erro: #ef4444;
+      --cor-aviso: #f59e0b;
+      --radius-card: 12px;
+      --radius-btn: 8px;
+      --sombra-card: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.04);
+    }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background: var(--cor-fundo);
+      color: var(--cor-texto);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* --- HEADER --- */
+    .header {
+      background: var(--cor-primaria);
+      color: #fff;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+    .header-icon {
+      width: 36px; height: 36px;
+      background: rgba(255,255,255,.15);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+    .header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -.01em;
+    }
+    .header p {
+      font-size: .78rem;
+      opacity: .8;
+      font-weight: 400;
+    }
+
+    /* --- CONTAINER PRINCIPAL --- */
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+    }
+
+    /* --- ZONA DE UPLOAD --- */
+    .upload-zone {
+      background: var(--cor-card);
+      border: 2px dashed var(--cor-borda);
+      border-radius: var(--radius-card);
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      box-shadow: var(--sombra-card);
+    }
+    .upload-zone:hover,
+    .upload-zone.drag-over {
+      border-color: var(--cor-primaria);
+      background: #f3eefe;
+    }
+    .upload-zone .icon { font-size: 2.5rem; margin-bottom: .75rem; }
+    .upload-zone .label {
+      font-weight: 600; font-size: 1rem; color: var(--cor-texto);
+      margin-bottom: .35rem;
+    }
+    .upload-zone .sublabel {
+      font-size: .82rem; color: var(--cor-texto-sec);
+    }
+    .upload-zone .sublabel span {
+      color: var(--cor-primaria); font-weight: 600;
+      text-decoration: underline; cursor: pointer;
+    }
+    .upload-zone input[type="file"] { display: none; }
+
+    /* --- CARDS GENÉRICOS --- */
+    .card {
+      background: var(--cor-card);
+      border-radius: var(--radius-card);
+      box-shadow: var(--sombra-card);
+      padding: 1.25rem 1.5rem;
+      margin-top: 1rem;
+    }
+    .card-title {
+      font-size: .85rem;
+      font-weight: 700;
+      color: var(--cor-primaria);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: .75rem;
+    }
+
+    /* --- PREVIEW: MÉTRICAS --- */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: .75rem;
+      margin-bottom: 1rem;
+    }
+    .metric-box {
+      background: var(--cor-fundo);
+      border-radius: 8px;
+      padding: .85rem;
+      text-align: center;
+    }
+    .metric-box .value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--cor-primaria);
+      line-height: 1.2;
+    }
+    .metric-box .label {
+      font-size: .72rem;
+      color: var(--cor-texto-sec);
+      font-weight: 500;
+      margin-top: .2rem;
+    }
+
+    /* --- LISTA DE PROFISSIONAIS --- */
+    .prof-list {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: .4rem .75rem;
+    }
+    .prof-list li {
+      font-size: .82rem;
+      color: var(--cor-texto);
+      padding: .3rem 0;
+      border-bottom: 1px solid var(--cor-fundo);
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+    }
+    .prof-list li::before {
+      content: '';
+      width: 6px; height: 6px;
+      background: var(--cor-primaria);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* --- BOTÕES DE AÇÃO --- */
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .75rem;
+      margin-top: 1.25rem;
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .75rem 1.25rem;
+      border: none;
+      border-radius: var(--radius-btn);
+      font-family: inherit;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s, transform .1s;
+      flex: 1;
+      justify-content: center;
+      min-width: 220px;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-primary {
+      background: var(--cor-primaria);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--cor-primaria-hover); }
+    .btn-secondary {
+      background: var(--cor-texto);
+      color: #fff;
+    }
+    .btn-secondary:hover:not(:disabled) { background: #2d2d4a; }
+
+    /* --- FEEDBACK / PROGRESSO --- */
+    .feedback {
+      margin-top: 1rem;
+      padding: .75rem 1rem;
+      border-radius: var(--radius-btn);
+      font-size: .82rem;
+      font-weight: 500;
+      display: none;
+    }
+    .feedback.info {
+      background: #ede9fe;
+      color: var(--cor-primaria);
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    .feedback.success {
+      background: #d1fae5;
+      color: #065f46;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    .feedback.error {
+      background: #fee2e2;
+      color: #991b1b;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 6px;
+      background: #e5e7eb;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: .5rem;
+      display: none;
+    }
+    .progress-bar {
+      height: 100%;
+      background: var(--cor-primaria);
+      border-radius: 3px;
+      transition: width .3s ease;
+      width: 0%;
+    }
+
+    /* --- UTILIDADES --- */
+    .hidden { display: none !important; }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* --- RESET DE ARQUIVO --- */
+    .reset-link {
+      font-size: .78rem;
+      color: var(--cor-primaria);
+      cursor: pointer;
+      text-decoration: underline;
+      font-weight: 500;
+      display: inline-block;
+      margin-top: .5rem;
+    }
+
+    /* --- RESPONSIVIDADE --- */
+    @media (max-width: 600px) {
+      .header h1 { font-size: .95rem; }
+      .container { padding: 1rem .75rem 2rem; }
+      .upload-zone { padding: 1.5rem 1rem; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .prof-list { grid-template-columns: 1fr; }
+      .actions { flex-direction: column; }
+      .btn { min-width: unset; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ HEADER ============ -->
+  <header class="header">
+    <div class="header-icon">📊</div>
+    <div>
+      <h1>Processador de Relatório Financeiro</h1>
+      <p>MediQuo — Pega Plantão</p>
+    </div>
+  </header>
+
+  <!-- ============ CONTEÚDO ============ -->
+  <main class="container">
+
+    <!-- ZONA DE UPLOAD -->
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">📁</div>
+      <div class="label">Arraste o arquivo .xlsx aqui</div>
+      <div class="sublabel">ou <span id="uploadBtn">clique para selecionar</span></div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
+
+    <!-- PREVIEW (oculto até upload) -->
+    <section id="previewSection" class="hidden">
+
+      <!-- Vigência e arquivo -->
+      <div class="card">
+        <div class="card-title">Resumo do relatório</div>
+        <div class="metrics">
+          <div class="metric-box">
+            <div class="value" id="metVigencia">—</div>
+            <div class="label">Vigência</div>
+          </div>
+          <div class="metric-box">
+            <div class="value" id="metProfs">—</div>
+            <div class="label">Profissionais</div>
+          </div>
+          <div class="metric-box">
+            <div class="value" id="metPlantoes">—</div>
+            <div class="label">Plantões</div>
+          </div>
+          <div class="metric-box">
+            <div class="value" id="metHoras">—</div>
+            <div class="label">Horas totais</div>
+          </div>
+          <div class="metric-box">
+            <div class="value" id="metValor">—</div>
+            <div class="label">Valor total</div>
+          </div>
+        </div>
+        <span class="reset-link" id="resetBtn">← Enviar outro arquivo</span>
+      </div>
+
+      <!-- Lista de profissionais -->
+      <div class="card">
+        <div class="card-title">Profissionais detectados</div>
+        <ul class="prof-list" id="profList"></ul>
+      </div>
+
+      <!-- Botões de ação -->
+      <div class="actions">
+        <button class="btn btn-primary" id="btnDia" disabled>
+          📊&ensp;Baixar Relatório por Dia (.xlsx)
+        </button>
+        <button class="btn btn-secondary" id="btnIndiv" disabled>
+          📁&ensp;Baixar Relatórios Individuais (.zip)
+        </button>
+      </div>
+
+      <!-- Feedback -->
+      <div class="feedback" id="feedback"></div>
+      <div class="progress-bar-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ LÓGICA ============ -->
+  <script>
+  (function () {
+    'use strict';
+
+    // ============================================================
+    //  REFERÊNCIAS DOM
+    // ============================================================
+    const uploadZone     = document.getElementById('uploadZone');
+    const fileInput      = document.getElementById('fileInput');
+    const uploadBtn      = document.getElementById('uploadBtn');
+    const previewSection = document.getElementById('previewSection');
+    const resetBtn       = document.getElementById('resetBtn');
+    const btnDia         = document.getElementById('btnDia');
+    const btnIndiv       = document.getElementById('btnIndiv');
+    const feedbackEl     = document.getElementById('feedback');
+    const progressCont   = document.getElementById('progressContainer');
+    const progressBar    = document.getElementById('progressBar');
+
+    // Estado global com dados parseados
+    let dadosRelatorio = null;
+
+    // ============================================================
+    //  UTILITÁRIOS
+    // ============================================================
+
+    /** Formata valor inteiro para moeda brasileira: R$ 1.234,00 */
+    function formatarMoeda(valor) {
+      return 'R$ ' + Number(valor).toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    /** Formata vigência de "DD/MM/AAAA~DD/MM/AAAA" para "DD-MM a DD-MM" */
+    function formatarVigenciaCurta(vigStr) {
+      // vigStr = "21/06/2026~20/07/2026"
+      const partes = vigStr.split('~');
+      if (partes.length !== 2) return vigStr;
+      const ini = partes[0].trim(); // "21/06/2026"
+      const fim = partes[1].trim(); // "20/07/2026"
+      const iniCurto = ini.substring(0, 5).replace(/\//g, '-'); // "21-06"
+      const fimCurto = fim.substring(0, 5).replace(/\//g, '-'); // "20-07"
+      return iniCurto + ' a ' + fimCurto;
+    }
+
+    /** Soma duas strings "HH:MM" e retorna "HH:MM" */
+    function somarDuracoes(dur1, dur2) {
+      const [h1, m1] = dur1.split(':').map(Number);
+      const [h2, m2] = dur2.split(':').map(Number);
+      const totalMin = (h1 * 60 + m1) + (h2 * 60 + m2);
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    }
+
+    /** Converte "HH:MM" em minutos totais */
+    function duracaoParaMinutos(dur) {
+      const [h, m] = dur.split(':').map(Number);
+      return h * 60 + m;
+    }
+
+    /** Converte minutos totais em "HH:MM" */
+    function minutosParaDuracao(totalMin) {
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    }
+
+    /** Extrai apenas a data "DD/MM/AAAA" de "DD/MM/AAAA HH:MM" */
+    function extrairData(dataHora) {
+      return dataHora ? dataHora.substring(0, 10) : '';
+    }
+
+    /** Converte "DD/MM/AAAA" para Date sortável */
+    function dataParaSort(dataStr) {
+      const p = dataStr.split('/');
+      return new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]));
+    }
+
+    /** Exibe feedback na interface */
+    function mostrarFeedback(msg, tipo) {
+      feedbackEl.className = 'feedback ' + tipo;
+      const iconMap = { info: '⏳', success: '✅', error: '❌' };
+      feedbackEl.innerHTML = (tipo === 'info' ? '<div class="spinner"></div>' : (iconMap[tipo] || '')) + '&ensp;' + msg;
+      feedbackEl.style.display = 'flex';
+    }
+
+    function esconderFeedback() {
+      feedbackEl.style.display = 'none';
+    }
+
+    function atualizarProgresso(atual, total) {
+      progressCont.style.display = 'block';
+      const pct = Math.round((atual / total) * 100);
+      progressBar.style.width = pct + '%';
+    }
+
+    function esconderProgresso() {
+      progressCont.style.display = 'none';
+      progressBar.style.width = '0%';
+    }
+
+    // ============================================================
+    //  UPLOAD E DRAG-AND-DROP
+    // ============================================================
+
+    uploadBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+    uploadZone.addEventListener('click', () => fileInput.click());
+
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('drag-over');
+    });
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('drag-over');
+    });
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) processarArquivo(files[0]);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) processarArquivo(fileInput.files[0]);
+    });
+
+    resetBtn.addEventListener('click', resetar);
+
+    function resetar() {
+      dadosRelatorio = null;
+      fileInput.value = '';
+      previewSection.classList.add('hidden');
+      uploadZone.classList.remove('hidden');
+      esconderFeedback();
+      esconderProgresso();
+      btnDia.disabled = true;
+      btnIndiv.disabled = true;
+    }
+
+    // ============================================================
+    //  PROCESSAMENTO DO ARQUIVO .XLSX
+    // ============================================================
+
+    function processarArquivo(file) {
+      // Validação do tipo de arquivo
+      if (!file.name.match(/\.xlsx?$/i)) {
+        mostrarFeedback('Por favor, envie um arquivo .xlsx válido.', 'error');
+        return;
+      }
+
+      mostrarFeedback('Lendo arquivo...', 'info');
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', raw: true });
+
+          // Acessar a primeira sheet
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+
+          // Converter para array de arrays
+          const rows = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            defval: null,
+            raw: true
+          });
+
+          // Parsear os dados
+          dadosRelatorio = parsearPlanilha(rows);
+
+          // Atualizar a interface
+          exibirPreview();
+          esconderFeedback();
+        } catch (err) {
+          console.error(err);
+          mostrarFeedback('Erro ao processar o arquivo: ' + err.message, 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // ============================================================
+    //  ALGORITMO DE PARSING
+    // ============================================================
+
+    function parsearPlanilha(rows) {
+      // 1) Extrair vigência da linha 3 (índice 2)
+      const vigenciaRaw = String(rows[2][0]).trim(); // "21/06/2026~20/07/2026"
+      const vigenciaParts = vigenciaRaw.split('~');
+      const vigencia = {
+        inicio: vigenciaParts[0].trim(),
+        fim: vigenciaParts[1].trim(),
+        raw: vigenciaRaw,
+        curta: formatarVigenciaCurta(vigenciaRaw)
+      };
+
+      const profissionais = [];
+      let profAtual = null;
+
+      // Regex para identificar linha de profissional: "Nome  -  CRM/UF"
+      const regexProf = /^(.+?)\s{2}-\s{2}(\d+\/[A-Z]{2})$/;
+
+      // 2) Iterar a partir da linha 5 (índice 4)
+      for (let i = 4; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row) continue;
+
+        const colA = row[0] != null ? String(row[0]).trim() : null;
+        const colB = row[1] != null ? String(row[1]).trim() : null;
+        const colC = row[2] != null ? String(row[2]).trim() : null;
+        const colD = row[3] != null ? String(row[3]).trim() : null;
+        const colE = row[4] != null ? String(row[4]).trim() : null;
+        const colF = row[5];
+
+        // a) Parar no "Total Geral"
+        if (colA === 'Total Geral') break;
+
+        // b) Linha completamente vazia
+        if (!colA && !colB && !colC && !colD && !colE && colF == null) continue;
+
+        // c) Linha de profissional: colA tem conteúdo, B-F são null/vazias
+        if (colA && !colB && !colC) {
+          const match = colA.match(regexProf);
+          if (match) {
+            if (profAtual) profissionais.push(profAtual);
+            profAtual = {
+              nome: match[1].trim(),
+              crm: match[2].trim(),
+              plantoes: [],
+              totalPlantoes: 0,
+              totalHoras: '00:00',
+              totalValor: 0
+            };
+            continue;
+          }
+        }
+
+        // d) Linha de cabeçalho de colunas
+        if (colA === 'Setor') continue;
+
+        // e) Linha de Total do profissional
+        if (colC === 'Total' && profAtual) {
+          // Calcular totais somando os dados reais (não confiar na fórmula)
+          let somaValor = 0;
+          let somaDurMin = 0;
+          profAtual.plantoes.forEach(p => {
+            somaValor += p.valor;
+            somaDurMin += duracaoParaMinutos(p.duracao);
+          });
+          profAtual.totalPlantoes = profAtual.plantoes.length;
+          profAtual.totalHoras = minutosParaDuracao(somaDurMin);
+          profAtual.totalValor = somaValor;
+          continue;
+        }
+
+        // f) Linha de dados de plantão
+        if (colA && colB && colC && profAtual) {
+          // Verificar se colC tem formato de data (DD/MM/AAAA HH:MM)
+          if (/^\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}$/.test(colC)) {
+            const valor = typeof colF === 'number' ? colF : parseInt(String(colF), 10) || 0;
+            profAtual.plantoes.push({
+              setor: colA,
+              tipo: colB.trim(),
+              inicio: colC,
+              fim: colD || '',
+              duracao: colE || '00:00',
+              valor: valor
+            });
+          }
+        }
+      }
+
+      // Adicionar o último profissional
+      if (profAtual) {
+        // Recalcular totais se não houve linha "Total"
+        if (profAtual.totalPlantoes === 0 && profAtual.plantoes.length > 0) {
+          let somaValor = 0;
+          let somaDurMin = 0;
+          profAtual.plantoes.forEach(p => {
+            somaValor += p.valor;
+            somaDurMin += duracaoParaMinutos(p.duracao);
+          });
+          profAtual.totalPlantoes = profAtual.plantoes.length;
+          profAtual.totalHoras = minutosParaDuracao(somaDurMin);
+          profAtual.totalValor = somaValor;
+        }
+        profissionais.push(profAtual);
+      }
+
+      // 3) Calcular totais gerais
+      let totalGeralPlantoes = 0;
+      let totalGeralMinutos = 0;
+      let totalGeralValor = 0;
+      profissionais.forEach(p => {
+        totalGeralPlantoes += p.totalPlantoes;
+        totalGeralMinutos += duracaoParaMinutos(p.totalHoras);
+        totalGeralValor += p.totalValor;
+      });
+
+      return {
+        vigencia,
+        profissionais,
+        totalGeral: {
+          plantoes: totalGeralPlantoes,
+          horas: minutosParaDuracao(totalGeralMinutos),
+          valor: totalGeralValor
+        }
+      };
+    }
+
+    // ============================================================
+    //  EXIBIR PREVIEW
+    // ============================================================
+
+    function exibirPreview() {
+      const d = dadosRelatorio;
+
+      // Atualizar métricas
+      document.getElementById('metVigencia').textContent = d.vigencia.curta;
+      document.getElementById('metProfs').textContent = d.profissionais.length;
+      document.getElementById('metPlantoes').textContent = d.totalGeral.plantoes;
+      document.getElementById('metHoras').textContent = d.totalGeral.horas;
+      document.getElementById('metValor').textContent = formatarMoeda(d.totalGeral.valor);
+
+      // Atualizar lista de profissionais
+      const lista = document.getElementById('profList');
+      lista.innerHTML = '';
+      d.profissionais.forEach(p => {
+        const li = document.createElement('li');
+        li.textContent = p.nome + '  (' + p.crm + ')';
+        lista.appendChild(li);
+      });
+
+      // Mostrar seção e esconder upload
+      uploadZone.classList.add('hidden');
+      previewSection.classList.remove('hidden');
+      btnDia.disabled = false;
+      btnIndiv.disabled = false;
+    }
+
+    // ============================================================
+    //  OUTPUT 1: RELATÓRIO POR DIA (.xlsx)
+    // ============================================================
+
+    btnDia.addEventListener('click', gerarRelatorioPorDia);
+
+    function gerarRelatorioPorDia() {
+      if (!dadosRelatorio) return;
+
+      mostrarFeedback('Gerando relatório por dia...', 'info');
+      btnDia.disabled = true;
+
+      // Usar setTimeout para permitir atualização da UI
+      setTimeout(() => {
+        try {
+          const d = dadosRelatorio;
+
+          // 1) Reunir todos os plantões com dados do profissional
+          const todosPlantoes = [];
+          d.profissionais.forEach(prof => {
+            prof.plantoes.forEach(pl => {
+              todosPlantoes.push({
+                data: extrairData(pl.inicio),
+                profissional: prof.nome,
+                crm: prof.crm,
+                setor: pl.setor,
+                tipo: pl.tipo,
+                inicio: pl.inicio,
+                fim: pl.fim,
+                duracao: pl.duracao,
+                valor: pl.valor
+              });
+            });
+          });
+
+          // 2) Ordenar por data (cronológica) e depois por profissional (alfabético)
+          todosPlantoes.sort((a, b) => {
+            const da = dataParaSort(a.data);
+            const db = dataParaSort(b.data);
+            if (da.getTime() !== db.getTime()) return da - db;
+            return a.profissional.localeCompare(b.profissional, 'pt-BR');
+          });
+
+          // 3) Montar dados para a planilha
+          const header = ['Data', 'Profissional', 'CRM', 'Setor', 'Tipo', 'Início', 'Fim', 'Duração (h)', 'Valor (R$)'];
+          const linhas = todosPlantoes.map(p => [
+            p.data, p.profissional, p.crm, p.setor, p.tipo,
+            p.inicio, p.fim, p.duracao, p.valor
+          ]);
+
+          // 4) Linha de total
+          let totalMin = 0;
+          let totalVal = 0;
+          todosPlantoes.forEach(p => {
+            totalMin += duracaoParaMinutos(p.duracao);
+            totalVal += p.valor;
+          });
+          linhas.push([]); // Linha vazia
+          linhas.push([
+            'TOTAL', '', '', '', '', '', '',
+            minutosParaDuracao(totalMin),
+            totalVal
+          ]);
+
+          // 5) Criar workbook com SheetJS
+          const wsData = [header, ...linhas];
+          const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+          // Definir largura das colunas
+          ws['!cols'] = [
+            { wch: 12 }, // Data
+            { wch: 35 }, // Profissional
+            { wch: 12 }, // CRM
+            { wch: 45 }, // Setor
+            { wch: 14 }, // Tipo
+            { wch: 18 }, // Início
+            { wch: 18 }, // Fim
+            { wch: 12 }, // Duração
+            { wch: 14 }, // Valor
+          ];
+
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Relatório por Dia');
+
+          // 6) Gerar e baixar
+          const nomeArquivo = 'Relatório por dia - Clínica geral - ' + d.vigencia.curta + '.xlsx';
+          XLSX.writeFile(wb, nomeArquivo);
+
+          mostrarFeedback('Relatório por dia gerado com sucesso!', 'success');
+        } catch (err) {
+          console.error(err);
+          mostrarFeedback('Erro ao gerar relatório: ' + err.message, 'error');
+        } finally {
+          btnDia.disabled = false;
+        }
+      }, 50);
+    }
+
+    // ============================================================
+    //  OUTPUT 2: RELATÓRIOS INDIVIDUAIS (ZIP de PDFs)
+    // ============================================================
+
+    btnIndiv.addEventListener('click', gerarRelatoriosIndividuais);
+
+    async function gerarRelatoriosIndividuais() {
+      if (!dadosRelatorio) return;
+
+      btnIndiv.disabled = true;
+      btnDia.disabled = true;
+      const d = dadosRelatorio;
+      const total = d.profissionais.length;
+
+      mostrarFeedback('Gerando PDF 1 de ' + total + '...', 'info');
+      atualizarProgresso(0, total);
+
+      try {
+        const zip = new JSZip();
+
+        for (let i = 0; i < total; i++) {
+          const prof = d.profissionais[i];
+          mostrarFeedback('Gerando PDF ' + (i + 1) + ' de ' + total + ' — ' + prof.nome + '...', 'info');
+          atualizarProgresso(i + 1, total);
+
+          // Gerar PDF individual
+          const pdfBlob = gerarPDFIndividual(prof, d.vigencia);
+
+          // Nome do arquivo PDF
+          const nomePDF = 'Relatório individual - Clínica geral - ' + prof.nome + ' - ' + d.vigencia.curta + '.pdf';
+          zip.file(nomePDF, pdfBlob);
+
+          // Yield para atualizar a UI
+          await new Promise(r => setTimeout(r, 30));
+        }
+
+        mostrarFeedback('Compactando arquivos...', 'info');
+
+        // Gerar ZIP e baixar
+        const zipBlob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        });
+
+        const nomeZip = 'Relatórios individuais - Clínica geral - ' + d.vigencia.curta + '.zip';
+        saveAs(zipBlob, nomeZip);
+
+        mostrarFeedback('Relatórios individuais gerados com sucesso! (' + total + ' PDFs)', 'success');
+        esconderProgresso();
+      } catch (err) {
+        console.error(err);
+        mostrarFeedback('Erro ao gerar relatórios: ' + err.message, 'error');
+        esconderProgresso();
+      } finally {
+        btnIndiv.disabled = false;
+        btnDia.disabled = false;
+      }
+    }
+
+    // ============================================================
+    //  GERAÇÃO DE PDF INDIVIDUAL (jsPDF + AutoTable)
+    // ============================================================
+
+    function gerarPDFIndividual(prof, vigencia) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+      const roxo = [73, 30, 156];      // #491e9c
+      const cinzaClaro = [245, 245, 247]; // #f5f5f7
+      const textoPrincipal = [26, 26, 46]; // #1a1a2e
+
+      // --- CABEÇALHO DO PDF ---
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Faixa roxa no topo
+      doc.setFillColor(...roxo);
+      doc.rect(0, 0, pageWidth, 22, 'F');
+
+      // Título na faixa
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(255, 255, 255);
+      doc.text('Relatório Individual de Plantões', 15, 10);
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('MediQuo — Clínica Geral', 15, 16.5);
+
+      // Vigência no canto direito
+      doc.setFontSize(9);
+      doc.text('Vigência: ' + vigencia.inicio + ' a ' + vigencia.fim, pageWidth - 15, 10, { align: 'right' });
+
+      // --- DADOS DO PROFISSIONAL ---
+      doc.setTextColor(...textoPrincipal);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(prof.nome, 15, 32);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(107, 114, 128);
+      doc.text('CRM: ' + prof.crm, 15, 38);
+
+      // --- TABELA DE PLANTÕES ---
+      const colunas = [
+        { header: 'Setor', dataKey: 'setor' },
+        { header: 'Tipo', dataKey: 'tipo' },
+        { header: 'Início', dataKey: 'inicio' },
+        { header: 'Fim', dataKey: 'fim' },
+        { header: 'Duração (h)', dataKey: 'duracao' },
+        { header: 'Valor (R$)', dataKey: 'valor' }
+      ];
+
+      const linhas = prof.plantoes.map(p => ({
+        setor: p.setor,
+        tipo: p.tipo,
+        inicio: p.inicio,
+        fim: p.fim,
+        duracao: p.duracao,
+        valor: formatarMoeda(p.valor)
+      }));
+
+      doc.autoTable({
+        columns: colunas,
+        body: linhas,
+        startY: 44,
+        theme: 'grid',
+        styles: {
+          font: 'helvetica',
+          fontSize: 8,
+          cellPadding: 3,
+          lineColor: [229, 231, 235],
+          lineWidth: 0.3,
+          textColor: textoPrincipal
+        },
+        headStyles: {
+          fillColor: roxo,
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 8
+        },
+        alternateRowStyles: {
+          fillColor: cinzaClaro
+        },
+        columnStyles: {
+          setor:   { cellWidth: 80 },
+          tipo:    { cellWidth: 28 },
+          inicio:  { cellWidth: 38 },
+          fim:     { cellWidth: 38 },
+          duracao: { cellWidth: 28, halign: 'center' },
+          valor:   { cellWidth: 35, halign: 'right' }
+        },
+        margin: { left: 15, right: 15 },
+        didDrawPage: function (data) {
+          // Rodapé de página
+          const pageHeight = doc.internal.pageSize.getHeight();
+          doc.setFontSize(7);
+          doc.setTextColor(160, 160, 160);
+          doc.text(
+            'Página ' + doc.internal.getCurrentPageInfo().pageNumber,
+            pageWidth - 15, pageHeight - 8,
+            { align: 'right' }
+          );
+        }
+      });
+
+      // --- TOTAIS APÓS A TABELA ---
+      const finalY = doc.lastAutoTable.finalY + 8;
+
+      // Box com totais
+      doc.setFillColor(...cinzaClaro);
+      doc.roundedRect(15, finalY, pageWidth - 30, 18, 3, 3, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(...textoPrincipal);
+
+      const y = finalY + 7;
+      doc.text('Total de Plantões: ' + prof.totalPlantoes, 22, y);
+      doc.text('Total de Horas: ' + prof.totalHoras, 100, y);
+      doc.text('Valor Total: ' + formatarMoeda(prof.totalValor), 180, y);
+
+      // Linha adicional
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(140, 140, 140);
+      doc.text('Relatório gerado automaticamente — MediQuo / Pega Plantão', 22, finalY + 14);
+
+      return doc.output('blob');
+    }
+
+  })();
+  </script>
+</body>
+</html>
