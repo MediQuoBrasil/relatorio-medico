@@ -425,6 +425,11 @@
       const regexProf = /^(.+?)\s{2}-\s{2}(\d+\/[A-Z]{2})$/;
 
       // 2) Iterar a partir da linha 5 (índice 4)
+      //    Novo formato com 12 colunas:
+      //    A(0):Setor  B(1):Tipo  C(2):Início  D(3):Fim
+      //    E(4):Entrada  F(5):Saída  G(6):Obs Prof  H(7):Obs Interna
+      //    I(8):Duração(h)  J(9):Dur.Considerada  K(10):Valor  L(11):Valor Considerado
+      //    Colunas usadas: C(Início), D(Fim), I(Duração), K(Valor)
       for (let i = 4; i < rows.length; i++) {
         const row = rows[i];
         if (!row) continue;
@@ -433,16 +438,16 @@
         const colB = row[1] != null ? String(row[1]).trim() : null;
         const colC = row[2] != null ? String(row[2]).trim() : null;
         const colD = row[3] != null ? String(row[3]).trim() : null;
-        const colE = row[4] != null ? String(row[4]).trim() : null;
-        const colF = row[5];
+        const colI = row[8] != null ? String(row[8]).trim() : null;   // Duração (h)
+        const colK = row[10];                                          // Valor
 
         // Parar no "Total Geral"
         if (colA === 'Total Geral') break;
 
-        // Linha vazia
-        if (!colA && !colB && !colC && !colD && !colE && colF == null) continue;
+        // Linha vazia (checa as colunas relevantes)
+        if (!colA && !colB && !colC && !colD && !colI && colK == null) continue;
 
-        // Linha de profissional
+        // Linha de profissional (só coluna A preenchida com o padrão nome - CRM)
         if (colA && !colB && !colC) {
           const match = colA.match(regexProf);
           if (match) {
@@ -452,7 +457,7 @@
               crm: match[2].trim(),
               plantoes: [],
               totalPlantoes: 0,
-              totalHoras: 0,   // agora em horas decimais
+              totalHoras: 0,
               totalValor: 0
             };
             continue;
@@ -462,7 +467,7 @@
         // Cabeçalho de colunas
         if (colA === 'Setor') continue;
 
-        // Total do profissional
+        // Total do profissional (coluna C = "Total")
         if (colC === 'Total' && profAtual) {
           let somaValor = 0;
           let somaHoras = 0;
@@ -477,10 +482,10 @@
         }
 
         // Linha de plantão (colC = "DD/MM/AAAA HH:MM")
-        if (colA && colB && colC && profAtual) {
+        if (colC && profAtual) {
           if (/^\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}$/.test(colC)) {
-            const valor = typeof colF === 'number' ? colF : parseInt(String(colF), 10) || 0;
-            const duracaoStr = colE || '00:00';
+            const valor = typeof colK === 'number' ? colK : parseInt(String(colK), 10) || 0;
+            const duracaoStr = colI || '00:00';
             profAtual.plantoes.push({
               inicio: colC,
               fim: colD || '',
@@ -640,12 +645,12 @@
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Relatório por Dia');
 
-        // Larguras idênticas ao IDEAL
+        // Larguras das colunas
         ws.columns = [
           { key: 'A', width: 12.86 },
           { key: 'B', width: 35.86 },
           { key: 'C', width: 18.86 },
-          { key: 'D', width: 13 },
+          { key: 'D', width: 18.86 },
           { key: 'E', width: 13.57 },
           { key: 'F', width: 14.86 }
         ];
@@ -763,10 +768,10 @@
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Relatório por Profissional');
 
-        // Larguras idênticas ao IDEAL
+        // Larguras das colunas
         ws.columns = [
           { key: 'A', width: 19 },
-          { key: 'B', width: 13 },
+          { key: 'B', width: 19 },
           { key: 'C', width: 13.86 },
           { key: 'D', width: 15 }
         ];
@@ -978,7 +983,7 @@
         styles: {
           font: 'helvetica',
           fontSize: 7,
-          cellPadding: { top: 1.2, right: 2, bottom: 1.2, left: 2 },
+          cellPadding: { top: 0.5, right: 1.5, bottom: 0.5, left: 1.5 },
           lineColor: [180, 180, 180],
           lineWidth: 0.3,
           textColor: textoPrincipal
@@ -988,7 +993,7 @@
           textColor: [255, 255, 255],
           fontStyle: 'bold',
           fontSize: 7,
-          cellPadding: { top: 1.5, right: 2, bottom: 1.5, left: 2 }
+          cellPadding: { top: 0.7, right: 1.5, bottom: 0.7, left: 1.5 }
         },
         alternateRowStyles: {
           fillColor: cinzaClaro
