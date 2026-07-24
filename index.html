@@ -365,6 +365,9 @@
         <button class="btn btn-primary" id="btnDia" disabled>
           📊&ensp;Baixar Relatório por Dia (.xlsx)
         </button>
+        <button class="btn btn-primary" id="btnProf" disabled>
+          📋&ensp;Baixar Relatório por Profissional (.xlsx)
+        </button>
         <button class="btn btn-secondary" id="btnIndiv" disabled>
           📁&ensp;Baixar Relatórios Individuais (.zip)
         </button>
@@ -392,6 +395,7 @@
     const previewSection = document.getElementById('previewSection');
     const resetBtn       = document.getElementById('resetBtn');
     const btnDia         = document.getElementById('btnDia');
+    const btnProf        = document.getElementById('btnProf');
     const btnIndiv       = document.getElementById('btnIndiv');
     const feedbackEl     = document.getElementById('feedback');
     const progressCont   = document.getElementById('progressContainer');
@@ -519,6 +523,7 @@
       esconderFeedback();
       esconderProgresso();
       btnDia.disabled = true;
+      btnProf.disabled = true;
       btnIndiv.disabled = true;
     }
 
@@ -722,6 +727,7 @@
       uploadZone.classList.add('hidden');
       previewSection.classList.remove('hidden');
       btnDia.disabled = false;
+      btnProf.disabled = false;
       btnIndiv.disabled = false;
     }
 
@@ -736,6 +742,7 @@
 
       mostrarFeedback('Gerando relatório por dia...', 'info');
       btnDia.disabled = true;
+      btnProf.disabled = true;
       btnIndiv.disabled = true;
 
       // Yield para UI atualizar
@@ -874,12 +881,132 @@
         mostrarFeedback('Erro ao gerar relatório: ' + err.message, 'error');
       } finally {
         btnDia.disabled = false;
+        btnProf.disabled = false;
         btnIndiv.disabled = false;
       }
     }
 
     // ============================================================
-    //  OUTPUT 2: RELATÓRIOS INDIVIDUAIS (ZIP de PDFs)
+    //  OUTPUT 2: RELATÓRIO POR PROFISSIONAL (.xlsx)
+    // ============================================================
+
+    btnProf.addEventListener('click', gerarRelatorioPorProfissional);
+
+    async function gerarRelatorioPorProfissional() {
+      if (!dadosRelatorio) return;
+
+      mostrarFeedback('Gerando relatório por profissional...', 'info');
+      btnDia.disabled = true;
+      btnProf.disabled = true;
+      btnIndiv.disabled = true;
+
+      await new Promise(r => setTimeout(r, 50));
+
+      try {
+        const d = dadosRelatorio;
+
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Relatório por Profissional');
+
+        // Largura das colunas (A-F)
+        ws.columns = [
+          { key: 'A', width: 45 },
+          { key: 'B', width: 12 },
+          { key: 'C', width: 19 },
+          { key: 'D', width: 19 },
+          { key: 'E', width: 13 },
+          { key: 'F', width: 15 }
+        ];
+
+        // Estilos reutilizáveis
+        const roxoHex = '491E9C';
+        const estiloHeaderProf = {
+          font: { bold: true, size: 12, color: { argb: 'FFFFFFFF' } },
+          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + roxoHex } },
+          alignment: { vertical: 'middle' }
+        };
+        const estiloColuna = {
+          font: { bold: true, size: 12, color: { argb: 'FF000000' } }
+        };
+        const estiloDado = {
+          font: { size: 12, color: { argb: 'FF000000' } }
+        };
+
+        let totalGeralMin = 0;
+        let totalGeralVal = 0;
+
+        // Profissionais ordenados alfabeticamente
+        const profsOrdenados = [...d.profissionais].sort((a, b) =>
+          a.nome.localeCompare(b.nome, 'pt-BR')
+        );
+
+        profsOrdenados.forEach((prof, idx) => {
+          // -- Linha de cabeçalho do profissional --
+          const nomeHeader = prof.nome + ' (' + prof.crm + '):';
+          const rowHeader = ws.addRow([nomeHeader, '', '', '', '', '']);
+          ws.mergeCells(rowHeader.number, 1, rowHeader.number, 6);
+          const cellHeader = ws.getCell(rowHeader.number, 1);
+          cellHeader.font = estiloHeaderProf.font;
+          cellHeader.fill = estiloHeaderProf.fill;
+          cellHeader.alignment = estiloHeaderProf.alignment;
+          for (let c = 1; c <= 6; c++) {
+            ws.getCell(rowHeader.number, c).fill = estiloHeaderProf.fill;
+          }
+
+          // -- Linha de cabeçalho de colunas --
+          const rowCols = ws.addRow(['Setor', 'Tipo', 'Início', 'Fim', 'Duração (h)', 'Valor (R$)']);
+          for (let c = 1; c <= 6; c++) {
+            ws.getCell(rowCols.number, c).font = estiloColuna.font;
+          }
+
+          // -- Linhas de dados --
+          prof.plantoes.forEach(p => {
+            const rowData = ws.addRow([p.setor, p.tipo, p.inicio, p.fim, p.duracao, p.valor]);
+            for (let c = 1; c <= 6; c++) {
+              ws.getCell(rowData.number, c).font = estiloDado.font;
+            }
+            totalGeralMin += duracaoParaMinutos(p.duracao);
+            totalGeralVal += p.valor;
+          });
+
+          // -- Linha vazia separadora --
+          if (idx < profsOrdenados.length - 1) {
+            ws.addRow([]);
+          }
+        });
+
+        // Linha vazia + TOTAL final
+        ws.addRow([]);
+        const rowTotal = ws.addRow(['TOTAL:', '', '', '', minutosParaDuracao(totalGeralMin), totalGeralVal]);
+        ws.mergeCells(rowTotal.number, 1, rowTotal.number, 4);
+        for (let c = 1; c <= 6; c++) {
+          const cell = ws.getCell(rowTotal.number, c);
+          cell.font = estiloHeaderProf.font;
+          cell.fill = estiloHeaderProf.fill;
+          cell.alignment = estiloHeaderProf.alignment;
+        }
+
+        // Gerar buffer e baixar
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const nomeArquivo = 'Relatório por profissional - Clínica geral - ' + d.vigencia.curta + '.xlsx';
+        saveAs(blob, nomeArquivo);
+
+        mostrarFeedback('Relatório por profissional gerado com sucesso!', 'success');
+      } catch (err) {
+        console.error(err);
+        mostrarFeedback('Erro ao gerar relatório: ' + err.message, 'error');
+      } finally {
+        btnDia.disabled = false;
+        btnProf.disabled = false;
+        btnIndiv.disabled = false;
+      }
+    }
+
+    // ============================================================
+    //  OUTPUT 3: RELATÓRIOS INDIVIDUAIS (ZIP de PDFs)
     // ============================================================
 
     btnIndiv.addEventListener('click', gerarRelatoriosIndividuais);
@@ -889,6 +1016,7 @@
 
       btnIndiv.disabled = true;
       btnDia.disabled = true;
+      btnProf.disabled = true;
       const d = dadosRelatorio;
       const total = d.profissionais.length;
 
@@ -935,6 +1063,7 @@
       } finally {
         btnIndiv.disabled = false;
         btnDia.disabled = false;
+        btnProf.disabled = false;
       }
     }
 
@@ -958,32 +1087,32 @@
 
       // Faixa roxa no topo
       doc.setFillColor(...roxo);
-      doc.rect(0, 0, pageWidth, 22, 'F');
+      doc.rect(0, 0, pageWidth, 18, 'F');
 
       // Título na faixa
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(14);
+      doc.setFontSize(12);
       doc.setTextColor(255, 255, 255);
-      doc.text('Relatório Individual de Plantões', 15, 10);
+      doc.text('Relatório Individual de Plantões', 15, 8);
 
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
-      doc.text('MediQuo — Clínica Geral', 15, 16.5);
+      doc.text('MediQuo — Clínica Geral', 15, 14);
 
       // Vigência no canto direito
-      doc.setFontSize(9);
-      doc.text('Vigência: ' + vigencia.inicio + ' a ' + vigencia.fim, pageWidth - 15, 10, { align: 'right' });
+      doc.setFontSize(8);
+      doc.text('Vigência: ' + vigencia.inicio + ' a ' + vigencia.fim, pageWidth - 15, 8, { align: 'right' });
 
       // --- DADOS DO PROFISSIONAL ---
       doc.setTextColor(...textoPrincipal);
-      doc.setFontSize(12);
+      doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
-      doc.text(prof.nome, 15, 32);
+      doc.text(prof.nome, 15, 26);
 
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(107, 114, 128);
-      doc.text('CRM: ' + prof.crm, 15, 38);
+      doc.text('CRM: ' + prof.crm, 15, 31);
 
       // --- TABELA DE PLANTÕES ---
       const colunas = [
@@ -1007,12 +1136,12 @@
       doc.autoTable({
         columns: colunas,
         body: linhas,
-        startY: 44,
+        startY: 36,
         theme: 'grid',
         styles: {
           font: 'helvetica',
-          fontSize: 8,
-          cellPadding: 3,
+          fontSize: 7,
+          cellPadding: { top: 1.2, right: 2, bottom: 1.2, left: 2 },
           lineColor: [229, 231, 235],
           lineWidth: 0.3,
           textColor: textoPrincipal
@@ -1021,16 +1150,17 @@
           fillColor: roxo,
           textColor: [255, 255, 255],
           fontStyle: 'bold',
-          fontSize: 8
+          fontSize: 7,
+          cellPadding: { top: 1.5, right: 2, bottom: 1.5, left: 2 }
         },
         alternateRowStyles: {
           fillColor: cinzaClaro
         },
         columnStyles: {
-          setor:   { cellWidth: 80 },
-          tipo:    { cellWidth: 28 },
-          inicio:  { cellWidth: 38 },
-          fim:     { cellWidth: 38 },
+          setor:   { cellWidth: 75 },
+          tipo:    { cellWidth: 25 },
+          inicio:  { cellWidth: 40 },
+          fim:     { cellWidth: 40 },
           duracao: { cellWidth: 28, halign: 'center' },
           valor:   { cellWidth: 35, halign: 'right' }
         },
@@ -1049,26 +1179,26 @@
       });
 
       // --- TOTAIS APÓS A TABELA ---
-      const finalY = doc.lastAutoTable.finalY + 8;
+      const finalY = doc.lastAutoTable.finalY + 5;
 
       // Box com totais
       doc.setFillColor(...cinzaClaro);
-      doc.roundedRect(15, finalY, pageWidth - 30, 18, 3, 3, 'F');
+      doc.roundedRect(15, finalY, pageWidth - 30, 14, 2, 2, 'F');
 
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setTextColor(...textoPrincipal);
 
-      const y = finalY + 7;
+      const y = finalY + 5.5;
       doc.text('Total de Plantões: ' + prof.totalPlantoes, 22, y);
       doc.text('Total de Horas: ' + prof.totalHoras, 100, y);
       doc.text('Valor Total: ' + formatarMoeda(prof.totalValor), 180, y);
 
       // Linha adicional
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(140, 140, 140);
-      doc.text('Relatório gerado automaticamente — MediQuo / Pega Plantão', 22, finalY + 14);
+      doc.text('Relatório gerado automaticamente — MediQuo / Pega Plantão', 22, finalY + 11);
 
       return doc.output('blob');
     }
