@@ -9,7 +9,8 @@
 
   <!-- Bibliotecas externas via CDN -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -730,96 +731,151 @@
 
     btnDia.addEventListener('click', gerarRelatorioPorDia);
 
-    function gerarRelatorioPorDia() {
+    async function gerarRelatorioPorDia() {
       if (!dadosRelatorio) return;
 
       mostrarFeedback('Gerando relatório por dia...', 'info');
       btnDia.disabled = true;
+      btnIndiv.disabled = true;
 
-      // Usar setTimeout para permitir atualização da UI
-      setTimeout(() => {
-        try {
-          const d = dadosRelatorio;
+      // Yield para UI atualizar
+      await new Promise(r => setTimeout(r, 50));
 
-          // 1) Reunir todos os plantões com dados do profissional
-          const todosPlantoes = [];
-          d.profissionais.forEach(prof => {
-            prof.plantoes.forEach(pl => {
-              todosPlantoes.push({
-                data: extrairData(pl.inicio),
-                profissional: prof.nome,
-                crm: prof.crm,
-                setor: pl.setor,
-                tipo: pl.tipo,
-                inicio: pl.inicio,
-                fim: pl.fim,
-                duracao: pl.duracao,
-                valor: pl.valor
-              });
+      try {
+        const d = dadosRelatorio;
+
+        // 1) Reunir todos os plantões com dados do profissional
+        const todosPlantoes = [];
+        d.profissionais.forEach(prof => {
+          prof.plantoes.forEach(pl => {
+            todosPlantoes.push({
+              data: extrairData(pl.inicio),
+              profissional: prof.nome,
+              inicio: pl.inicio,
+              fim: pl.fim,
+              duracao: pl.duracao,
+              valor: pl.valor
             });
           });
+        });
 
-          // 2) Ordenar por data (cronológica) e depois por profissional (alfabético)
-          todosPlantoes.sort((a, b) => {
-            const da = dataParaSort(a.data);
-            const db = dataParaSort(b.data);
-            if (da.getTime() !== db.getTime()) return da - db;
-            return a.profissional.localeCompare(b.profissional, 'pt-BR');
+        // 2) Ordenar por data (cronológica) e profissional (alfabético)
+        todosPlantoes.sort((a, b) => {
+          const da = dataParaSort(a.data);
+          const db = dataParaSort(b.data);
+          if (da.getTime() !== db.getTime()) return da - db;
+          return a.profissional.localeCompare(b.profissional, 'pt-BR');
+        });
+
+        // 3) Agrupar por data
+        const gruposPorDia = {};
+        const ordemDias = [];
+        todosPlantoes.forEach(p => {
+          if (!gruposPorDia[p.data]) {
+            gruposPorDia[p.data] = [];
+            ordemDias.push(p.data);
+          }
+          gruposPorDia[p.data].push(p);
+        });
+
+        // 4) Criar workbook com ExcelJS (suporte a estilos)
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Relatório por Dia');
+
+        // Definir largura das colunas (A-F)
+        ws.columns = [
+          { key: 'A', width: 12.875 },
+          { key: 'B', width: 35.875 },
+          { key: 'C', width: 18.875 },
+          { key: 'D', width: 18.875 },
+          { key: 'E', width: 12.875 },
+          { key: 'F', width: 14.875 }
+        ];
+
+        // Estilos reutilizáveis
+        const roxoHex = '491E9C';
+        const estiloHeaderDia = {
+          font: { bold: true, size: 12, color: { argb: 'FFFFFFFF' } },
+          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + roxoHex } },
+          alignment: { vertical: 'middle' }
+        };
+        const estiloColuna = {
+          font: { bold: true, size: 12, color: { argb: 'FF000000' } }
+        };
+        const estiloDado = {
+          font: { size: 12, color: { argb: 'FF000000' } }
+        };
+
+        // Calcular totais gerais
+        let totalGeralMin = 0;
+        let totalGeralVal = 0;
+
+        // 5) Montar planilha grupo a grupo
+        ordemDias.forEach((dia, idx) => {
+          const plantoesDia = gruposPorDia[dia];
+
+          // -- Linha de cabeçalho do dia: "DD/MM/AAAA:" --
+          const rowHeader = ws.addRow([dia + ':', '', '', '', '', '']);
+          ws.mergeCells(rowHeader.number, 1, rowHeader.number, 6);
+          const cellHeader = ws.getCell(rowHeader.number, 1);
+          cellHeader.font = estiloHeaderDia.font;
+          cellHeader.fill = estiloHeaderDia.fill;
+          cellHeader.alignment = estiloHeaderDia.alignment;
+          // Aplicar fill roxo em todas as 6 colunas da linha merged
+          for (let c = 1; c <= 6; c++) {
+            ws.getCell(rowHeader.number, c).fill = estiloHeaderDia.fill;
+          }
+
+          // -- Linha de cabeçalho de colunas --
+          const rowCols = ws.addRow(['Data', 'Profissional', 'Início', 'Fim', 'Duração (h)', 'Valor (R$)']);
+          for (let c = 1; c <= 6; c++) {
+            const cell = ws.getCell(rowCols.number, c);
+            cell.font = estiloColuna.font;
+          }
+
+          // -- Linhas de dados --
+          plantoesDia.forEach(p => {
+            const rowData = ws.addRow([p.data, p.profissional, p.inicio, p.fim, p.duracao, p.valor]);
+            for (let c = 1; c <= 6; c++) {
+              ws.getCell(rowData.number, c).font = estiloDado.font;
+            }
+            totalGeralMin += duracaoParaMinutos(p.duracao);
+            totalGeralVal += p.valor;
           });
 
-          // 3) Montar dados para a planilha
-          const header = ['Data', 'Profissional', 'CRM', 'Setor', 'Tipo', 'Início', 'Fim', 'Duração (h)', 'Valor (R$)'];
-          const linhas = todosPlantoes.map(p => [
-            p.data, p.profissional, p.crm, p.setor, p.tipo,
-            p.inicio, p.fim, p.duracao, p.valor
-          ]);
+          // -- Linha vazia separadora (exceto depois do último grupo) --
+          if (idx < ordemDias.length - 1) {
+            ws.addRow([]);
+          }
+        });
 
-          // 4) Linha de total
-          let totalMin = 0;
-          let totalVal = 0;
-          todosPlantoes.forEach(p => {
-            totalMin += duracaoParaMinutos(p.duracao);
-            totalVal += p.valor;
-          });
-          linhas.push([]); // Linha vazia
-          linhas.push([
-            'TOTAL', '', '', '', '', '', '',
-            minutosParaDuracao(totalMin),
-            totalVal
-          ]);
-
-          // 5) Criar workbook com SheetJS
-          const wsData = [header, ...linhas];
-          const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-          // Definir largura das colunas
-          ws['!cols'] = [
-            { wch: 12 }, // Data
-            { wch: 35 }, // Profissional
-            { wch: 12 }, // CRM
-            { wch: 45 }, // Setor
-            { wch: 14 }, // Tipo
-            { wch: 18 }, // Início
-            { wch: 18 }, // Fim
-            { wch: 12 }, // Duração
-            { wch: 14 }, // Valor
-          ];
-
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, 'Relatório por Dia');
-
-          // 6) Gerar e baixar
-          const nomeArquivo = 'Relatório por dia - Clínica geral - ' + d.vigencia.curta + '.xlsx';
-          XLSX.writeFile(wb, nomeArquivo);
-
-          mostrarFeedback('Relatório por dia gerado com sucesso!', 'success');
-        } catch (err) {
-          console.error(err);
-          mostrarFeedback('Erro ao gerar relatório: ' + err.message, 'error');
-        } finally {
-          btnDia.disabled = false;
+        // 6) Linha vazia + TOTAL final
+        ws.addRow([]);
+        const rowTotal = ws.addRow(['TOTAL:', '', '', '', minutosParaDuracao(totalGeralMin), totalGeralVal]);
+        ws.mergeCells(rowTotal.number, 1, rowTotal.number, 4);
+        for (let c = 1; c <= 6; c++) {
+          const cell = ws.getCell(rowTotal.number, c);
+          cell.font = estiloHeaderDia.font;
+          cell.fill = estiloHeaderDia.fill;
+          cell.alignment = estiloHeaderDia.alignment;
         }
-      }, 50);
+
+        // 7) Gerar buffer e baixar
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const nomeArquivo = 'Relatório por dia - Clínica geral - ' + d.vigencia.curta + '.xlsx';
+        saveAs(blob, nomeArquivo);
+
+        mostrarFeedback('Relatório por dia gerado com sucesso!', 'success');
+      } catch (err) {
+        console.error(err);
+        mostrarFeedback('Erro ao gerar relatório: ' + err.message, 'error');
+      } finally {
+        btnDia.disabled = false;
+        btnIndiv.disabled = false;
+      }
     }
 
     // ============================================================
@@ -887,6 +943,9 @@
     // ============================================================
 
     function gerarPDFIndividual(prof, vigencia) {
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        throw new Error('Biblioteca jsPDF não carregou. Recarregue a página e tente novamente.');
+      }
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
